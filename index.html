@@ -57,6 +57,13 @@
         font-size: 1em;
         box-sizing: border-box;
       }
+      input[type="text"] {
+        width: 100%;
+        padding: 8px;
+        font-size: 1em;
+        box-sizing: border-box;
+        margin-bottom: 10px;
+      }
       button {
         display: block;
         width: 100%;
@@ -81,7 +88,8 @@
         .total {
           font-size: 1em;
         }
-        input[type="number"] {
+        input[type="number"],
+        input[type="text"] {
           font-size: 0.9em;
         }
         button {
@@ -91,35 +99,45 @@
     </style>
   </head>
   <body>
-    <h1>Заказ продукции</h1>
-    <table>
-      <thead>
-        <tr>
-          <th>Наименование</th>
-          <th>Ед. изм.</th>
-          <th>Цена (драм)</th>
-          <th>Количество</th>
-          <th>Сумма (драм)</th>
-        </tr>
-      </thead>
-      <tbody id="productTable">
-        <!-- Динамически заполняемые строки -->
-      </tbody>
-    </table>
-    <div class="total">Итоговая сумма: <span id="totalSum"></span> драм</div>
-    <div class="total">
-      Скидка:
+    <div class="container">
+      <h1>Заказ продукции</h1>
       <input
-        type="number"
-        id="discount"
-        value=""
-        min="0"
-        step="0.01"
-        oninput="updateTotal()"
-      />%
+        type="text"
+        id="search"
+        placeholder="Поиск по продуктам"
+        oninput="filterProducts()"
+      />
+      <table>
+        <thead>
+          <tr>
+            <th>Наименование</th>
+            <th>Ед. изм.</th>
+            <th>Цена (драм)</th>
+            <th>Количество</th>
+            <th>Сумма (драм)</th>
+          </tr>
+        </thead>
+        <tbody id="productTable">
+          <!-- Динамически заполняемые строки -->
+        </tbody>
+      </table>
+      <div class="total">Итоговая сумма: <span id="totalSum"></span> драм</div>
+      <div class="total">
+        Скидка:
+        <input
+          type="number"
+          id="discount"
+          value=""
+          min="0"
+          step="0.01"
+          oninput="updateTotal()"
+        />%
+      </div>
+      <button onclick="showOrderSummary()">Показать заказ</button>
+      <button onclick="copyOrder()">Копировать заказ</button>
+      <button onclick="clearOrder()">Очистить заказ</button>
+      <div id="orderSummary" class="order-summary"></div>
     </div>
-    <button onclick="showOrderSummary()">Показать заказ</button>
-    <div id="orderSummary" class="order-summary"></div>
 
     <script>
       const products = [
@@ -354,17 +372,20 @@
         const discountAmount = total * (discount / 100);
         const finalTotal = total - discountAmount;
         totalSumElement.textContent = finalTotal.toFixed(2);
+
+        // Сохранение данных в localStorage
+        saveData();
       }
 
       function createRow(product) {
         const row = document.createElement("tr");
         row.innerHTML = `
-                <td>${product.name}</td>
-                <td>${product.unit}</td>
-                <td class="price">${product.price}</td>
-                <td><input type="number" class="quantity" value=" " min="0" oninput="updateTotal()"></td>
-                <td class="sum">0</td>
-            `;
+          <td>${product.name}</td>
+          <td>${product.unit}</td>
+          <td class="price">${product.price}</td>
+          <td><input type="number" class="quantity" value=" " min="0" oninput="updateTotal()"></td>
+          <td class="sum">0</td>
+        `;
         return row;
       }
 
@@ -374,6 +395,7 @@
           const row = createRow(product);
           tableBody.appendChild(row);
         });
+        loadData(); // Загрузка данных из localStorage
       }
 
       function showOrderSummary() {
@@ -390,10 +412,8 @@
             const sum = quantity * price;
             totalOrder += sum;
             summary += `
-                        <p>
-                            ${name} - Количество: ${quantity} 
-                        </p>
-                    `;
+              <p>${name} - Количество: ${quantity}</p>
+            `;
           }
         });
 
@@ -408,6 +428,77 @@
           2
         )} драм</h3>`;
         summaryElement.innerHTML = summary;
+      }
+
+      function saveData() {
+        const quantities = [];
+        const rows = document.querySelectorAll("#productTable tr");
+        rows.forEach((row, index) => {
+          const quantity = row.querySelector(".quantity").value;
+          quantities[index] = quantity;
+        });
+        localStorage.setItem("quantities", JSON.stringify(quantities));
+        const discount = document.getElementById("discount").value;
+        localStorage.setItem("discount", discount);
+      }
+
+      function loadData() {
+        const quantities = JSON.parse(localStorage.getItem("quantities")) || [];
+        const discount = localStorage.getItem("discount") || "";
+
+        const rows = document.querySelectorAll("#productTable tr");
+        rows.forEach((row, index) => {
+          if (quantities[index]) {
+            row.querySelector(".quantity").value = quantities[index];
+          }
+        });
+
+        document.getElementById("discount").value = discount;
+        updateTotal();
+      }
+
+      function filterProducts() {
+        const searchValue = document
+          .getElementById("search")
+          .value.toLowerCase();
+        const rows = document.querySelectorAll("#productTable tr");
+
+        rows.forEach((row) => {
+          const productName = row.querySelector("td").textContent.toLowerCase();
+          if (productName.includes(searchValue)) {
+            row.style.display = "";
+          } else {
+            row.style.display = "none";
+          }
+        });
+      }
+
+      function copyOrder() {
+        const summaryElement = document.getElementById("orderSummary");
+        const textToCopy =
+          summaryElement.innerText || summaryElement.textContent;
+
+        if (textToCopy) {
+          navigator.clipboard
+            .writeText(textToCopy)
+            .then(() => alert("Заказ скопирован в буфер обмена"))
+            .catch((err) => alert("Не удалось скопировать заказ: " + err));
+        } else {
+          alert("Нет данных для копирования");
+        }
+      }
+
+      function clearOrder() {
+        const rows = document.querySelectorAll("#productTable tr");
+        rows.forEach((row) => {
+          row.querySelector(".quantity").value = 0;
+          row.querySelector(".sum").textContent = "0";
+        });
+        document.getElementById("discount").value = "";
+        document.getElementById("totalSum").textContent = "0.00";
+        localStorage.removeItem("quantities");
+        localStorage.removeItem("discount");
+        document.getElementById("orderSummary").innerHTML = "";
       }
 
       document.addEventListener("DOMContentLoaded", populateTable);
